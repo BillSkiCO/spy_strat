@@ -5,7 +5,7 @@
 
 # imports
 import datetime
-from selenium import webdriver
+from lxml import html
 from time import sleep
 from api import YO_API, BILL_UN, SPY_API_URL, VIX_API_URL, PROXIES
 import requests
@@ -94,16 +94,19 @@ def main() -> None:
     nobj = NotifyObject()
     rev_list = []
 
-    # webdriver init
-    driver = webdriver.Firefox()
-    driver.get(INVESTING_URL)
-
     current_date = datetime.datetime.now(tz=EST5EDT()).date().isoformat()
 
     # Get open price, trend, threshold value
     try:
-        open_price = float(driver.find_element_by_xpath(OPEN_PRICE_XPATH).text[1:])
-        current_price = float(driver.find_element_by_xpath(SPY_CURRENT).text[1:])
+        page = requests.get(INVESTING_URL)
+        tree = html.fromstring(page.content)
+
+        open_div = tree.xpath(OPEN_PRICE_XPATH)
+        current_div = tree.xpath(SPY_CURRENT)
+
+        open_price = float(open_div[0].text[1:])
+        current_price = float(current_div[0].text[1:])
+
         trend = current_price - open_price
         threshold_delta = open_price * PRICE_THRESHOLD
         nobj.open_price = open_price
@@ -118,14 +121,10 @@ def main() -> None:
             threshold_target = open_price + threshold_delta
             nobj.target_price = threshold_target
 
-        # Cleanup
-        driver.close()
-
         # Wait 3 minutes to ensure alphavantage API has up to date info
 
     except Exception:
         print("Error: Could not get pricing")
-        driver.close()
         open_price = 0.0
         threshold_target = None
         exit(1)
@@ -194,7 +193,6 @@ def main() -> None:
             raise NotifyException(nobj)
     except Exception:
         print(nobj.message)
-        exit(1)
 
 
 if __name__ == "__main__":
