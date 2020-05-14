@@ -15,7 +15,6 @@ from typing import List
 # Public Globals
 INVESTING_URL = 'https://robinhood.com/stocks/SPY'
 OPEN_PRICE_XPATH = '/html/body/div[1]/main/div[2]/div/div/div/div/main/div[2]/div[1]/div/section[3]/div[2]/div[7]/div[3]'
-SPY_CURRENT = '/html/body/div[1]/main/div[2]/div/div/div/div/main/div[2]/div[2]/div/div[1]/div/div/div[1]/div[2]/span[2]'
 FIRST_MIN = '09:31:00'
 PRICE_THRESHOLD = .0075
 VIX_THRESHOLD = 30.0
@@ -131,23 +130,14 @@ def main() -> None:
         # Pull open price from Robinhood's SPY page via XPATH
         open_div = tree.xpath(OPEN_PRICE_XPATH)
 
-        # Get closing price of 09:30 from the open price of 09:31
+        # Get closing price of 09:30
         resp = requests.get(api.SPY_API_URL, proxies=api.PROXIES)
         d = resp.json()
         d = d['Time Series (1min)']
 
-        # API Response starts with most recent times first
-        # Invert API response into a LIFO tuple list. Start of trading day first
-        # Tuple list rev_list = [(time, open price), (time, open price)..]
         for key in d:
-            tmp_tuple = (key, d[key]['1. open'])
-            rev_list.insert(0, tmp_tuple)
-
-        # rev_list = [('2015-10-21 16:29:00', '1.21'),....]
-        for i in rev_list:
-            if current_date in i[0]:
-                if FIRST_MIN in i[0]:
-                    first_min_close = float(i[1])
+            if current_date and FIRST_MIN in key:
+                first_min_close = float(d[key]['4. close'])
 
         # Error Check
         if first_min_close is None:
@@ -161,7 +151,7 @@ def main() -> None:
 
         open_price = float(open_div[0].text[1:])
 
-        trend= first_min_close - open_price
+        trend = first_min_close - open_price
         threshold_delta = open_price * PRICE_THRESHOLD
         nobj.open_price = open_price
 
@@ -198,53 +188,59 @@ def main() -> None:
 
     while trading_open():
 
+        # Clear rev list
+        rev_list.clear()
+
         # Pull JSON response from API
         resp = requests.get(api.SPY_API_URL, proxies=api.PROXIES)
         d = resp.json()
         d = d['Time Series (1min)']
 
-        # Invert API response into a FIFO tuple list. Start of trading day first
+        # Invert API response and pull relevant data using LIFO tuple list.
+        # Start of trading day first. Only get current day and not the first min
         # Tuple list rev_list = [(time, high, low), (time, high, low)..]
+        # [('09:32:00', high, low), ('09:33:00', high, low), ..]
         for key in d:
+            if current_date in key and FIRST_MIN not in key:
                 tmp_tuple = (key, d[key]['2. high'], d[key]['3. low'])
                 rev_list.insert(0, tmp_tuple)
+            else:
+                continue
 
         for i in rev_list:
 
-            # if current date is part of the key
-            if current_date in i[0]:
-                high = float(i[1])
-                low = float(i[2])
-                try:
-                    if bear_open:
-                        if low <= threshold_target:
-                            tmp_vix = get_vix()
-                            if tmp_vix >= VIX_THRESHOLD:
-                                nobj.message = "Threshold Hit VIX OK Trade ON"
-                                raise NotifyException(nobj)
-                            else:
-                                nobj.message = "Threshold Hit VIX LOW "\
-                                               + str(tmp_vix)
-                                raise NotifyException(nobj)
-                        if high >= open_price:
-                            nobj.message = "Open Crossed. Do not Trade"
+            high = float(i[1])
+            low = float(i[2])
+            try:
+                if bear_open:
+                    if low <= threshold_target:
+                        tmp_vix = get_vix()
+                        if tmp_vix >= VIX_THRESHOLD:
+                            nobj.message = "Threshold Hit VIX OK Trade ON"
                             raise NotifyException(nobj)
-                    if not bear_open:
-                        if high >= threshold_target:
-                            tmp_vix = get_vix()
-                            if tmp_vix >= VIX_THRESHOLD:
-                                nobj.message = "Threshold Hit VIX OK Trade ON"
-                                raise NotifyException(nobj)
-                            else:
-                                nobj.message = "Threshold Hit VIX LOW "\
-                                               + str(tmp_vix)
-                                raise NotifyException(nobj)
-                        if high <= open_price:
-                            nobj.message = "Open Crossed. Do not Trade"
+                        else:
+                            nobj.message = "Threshold Hit VIX LOW "\
+                                           + str(tmp_vix)
                             raise NotifyException(nobj)
-                except Exception:
-                    print(nobj.message)
-                    exit(1)
+                    if high >= open_price:
+                        nobj.message = "Open Crossed. Do not Trade"
+                        raise NotifyException(nobj)
+                if not bear_open:
+                    if high >= threshold_target:
+                        tmp_vix = get_vix()
+                        if tmp_vix >= VIX_THRESHOLD:
+                            nobj.message = "Threshold Hit VIX OK Trade ON"
+                            raise NotifyException(nobj)
+                        else:
+                            nobj.message = "Threshold Hit VIX LOW "\
+                                           + str(tmp_vix)
+                            raise NotifyException(nobj)
+                    if high <= open_price:
+                        nobj.message = "Open Crossed. Do not Trade"
+                        raise NotifyException(nobj)
+            except Exception:
+                print(nobj.message)
+                exit(1)
 
         # Sleep for a minute
         print("No trigger for: "
@@ -254,7 +250,7 @@ def main() -> None:
 
     try:
         if not trading_open():
-            nobj.message = "Trading closed. Did not cross"
+            nobj.message = "Noon passed. Did not cross"
             raise NotifyException(nobj)
     except Exception:
         print(nobj.message)
