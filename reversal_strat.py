@@ -109,11 +109,11 @@ def get_vix() -> float:
 
 def main() -> None:
 
-    bear_open: bool = False
-    nobj: NotifyObject = NotifyObject()
-    rev_list: List = []
-    open_price: float = None
-    first_min_close: float = None
+    bear_open = False
+    nobj = NotifyObject()
+    rev_list = []
+    open_price = None
+    first_min_close = None
 
     twitter = Twython(app_key=api.TW_CUSTOMER_API,
                       app_secret=api.TW_PRIV_API,
@@ -161,9 +161,9 @@ def main() -> None:
 
         open_price: float = float(open_div[0].text[1:])
 
-        trend: float = first_min_close - open_price
-        threshold_delta: float = open_price * PRICE_THRESHOLD
-        nobj.open_price: float = open_price
+        trend= first_min_close - open_price
+        threshold_delta = open_price * PRICE_THRESHOLD
+        nobj.open_price = open_price
 
         if trend <= 0.0:
             bear_open = True
