@@ -186,6 +186,9 @@ def main() -> None:
         threshold_target = None
         exit(1)
 
+    # Dont get rate limited
+    sleep(5)
+
     while trading_open():
 
         # Clear rev list
