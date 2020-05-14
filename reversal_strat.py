@@ -159,7 +159,7 @@ def main() -> None:
                           proxies=api.PROXIES)
             exit(1)
 
-        open_price: float = float(open_div[0].text[1:])
+        open_price = float(open_div[0].text[1:])
 
         trend= first_min_close - open_price
         threshold_delta = open_price * PRICE_THRESHOLD
